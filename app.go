@@ -199,6 +199,7 @@ func main() {
 	e.Action = "opened"
 	e.WasArmed = true
 
+	//add some sample events
 	ArmSystem()
 	AddEvent(e)
 	AddEvent(e)
