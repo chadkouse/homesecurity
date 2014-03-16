@@ -4,10 +4,12 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"github.com/ant0ine/go-json-rest"
+	"github.com/davecheney/gpio"
 	"github.com/steveyen/gkvlite"
 	"log"
 	"net/http"
 	"os"
+	"sethwklein.net/go/errutil"
 	"time"
 )
 
@@ -33,39 +35,41 @@ var f os.File
 var s gkvlite.Store
 var dbname = "/tmp/test.db"
 
-func setObj(collection string, key []byte, object interface{}) error {
-	f2, err := os.OpenFile(dbname, os.O_RDWR, 0666)
-	if err != nil {
-		log.Println("Error while opening db", err)
-		return err
+func setObj(collection string, key []byte, object interface{}) (err error) {
+	f2, er := os.OpenFile(dbname, os.O_RDWR, 0666)
+	defer errutil.AppendCall(&err, f2.Close)
+	defer errutil.AppendCall(&err, f2.Sync)
+	if er != nil {
+		log.Println("Error while opening db", er)
+		return er
 	}
-	s2, err := gkvlite.NewStore(f2)
-	if err != nil {
-		log.Println("Error while opening store", err)
-		return err
+	s2, er := gkvlite.NewStore(f2)
+	defer errutil.AppendCall(&err, s2.Flush)
+	if er != nil {
+		log.Println("Error while opening store", er)
+		return er
 	}
 
 	c := s2.SetCollection(collection, nil)
 
-	objectBytes, err := json.Marshal(object)
-	if err != nil {
-		log.Println("Error while marshalling object in collection", collection, object, err)
-		return err
+	objectBytes, er := json.Marshal(object)
+	if er != nil {
+		log.Println("Error while marshalling object in collection", collection, object, er)
+		return er
 	}
 
-	err = c.Set(key, objectBytes)
-	if err != nil {
-		log.Println("Error while saving object", key, collection, object, err)
-		return err
+	er = c.Set(key, objectBytes)
+	if er != nil {
+		log.Println("Error while saving object", key, collection, object, er)
+		return er
 	}
 	// log.Println("Set", collection, key, object)
-	if err := s2.Flush(); err != nil {
+	if er := s2.Flush(); er != nil {
 		log.Println("Error flushing changes to disk")
-	} else {
-		// log.Println("Flushed")
+		return er
 	}
 	f2.Sync()
-	return nil
+	return err
 }
 
 func AddEvent(e Event) error {
@@ -155,6 +159,7 @@ func HandleGetAllEvents(w *rest.ResponseWriter, req *rest.Request) {
 
 func GetUser(w *rest.ResponseWriter, req *rest.Request) {
 	f2, err := os.Open(dbname)
+	defer f2.Close()
 	s2, err := gkvlite.NewStore(f2)
 	c := s2.SetCollection("users", nil)
 	//time.Now().Unix()
@@ -193,6 +198,8 @@ func main() {
 	s, err := gkvlite.NewStore(f)
 
 	s.Flush()
+	f.Sync()
+	f.Close()
 
 	e := Event{}
 	e.Name = "front door"
