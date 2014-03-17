@@ -1,0 +1,48 @@
+<html>
+<head>
+	<title>Security</title>
+	<link type="text/css" rel="stylesheet" href="/static/style.css"/> 
+	<link type="text/css" rel="stylesheet" href="/bower_components/bootstrap/dist/css/bootstrap.min.css"/> 
+	<link type="text/css" rel="stylesheet" href="/bower_components/bootstrap/dist/css/bootstrap-theme.min.css"/> 
+</head>
+<body style="padding-top:70px">
+	<div class="navbar navbar-inverse navbar-fixed-top" role="navigation">
+      <div class="container">
+        <div class="navbar-header">
+          <a class="navbar-brand" href="#">Home Security</a>
+        </div>
+        <div class="navbar-collapse collapse">
+          <ul class="nav navbar-nav">
+            <li class="active"><a href="#">Home</a></li>
+          </ul>
+        </div><!--/.nav-collapse -->
+      </div>
+    </div>
+    <div class="container">
+
+	{{#system_status}}
+	<h3>
+	System status is {{Status}} as of {{LastUpdateStr}}
+</h3>
+<hr/>
+<div class="container">
+<div class="col-md-6 pull-left">
+<form method="POST" action="/arm">
+<button type="submit" class="btn btn-lg btn-danger">Arm</button>
+</form>
+</div>
+<div class="col-md-6 pull-left">
+<form method="POST" action="/disarm">
+<button type="submit" class="btn btn-lg btn-success">Disarm</button>
+</form>
+</div>
+</div>
+<div class="clearfix"></div>
+	{{/system_status}}
+	Sensors:
+	{{#sensors}}
+		{{> part_sensor}}<br/>
+	{{/sensors}}
+</div>
+</body>
+</html>

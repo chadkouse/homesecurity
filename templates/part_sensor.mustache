@@ -1,0 +1,8 @@
+<div class="sensor">
+	{{#Alarm}}
+		<div class="status alarm">{{Name}} - Open</div>
+	{{/Alarm}}
+	{{^Alarm}}
+		<div class="status ok">{{Name}} - Closed</div>
+	{{/Alarm}}
+</div>

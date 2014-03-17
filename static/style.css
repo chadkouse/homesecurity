@@ -1,0 +1,6 @@
+.sensor .alarm {
+  color: #ff0000;
+}
+.sensor .ok {
+  color: #008000;
+}
