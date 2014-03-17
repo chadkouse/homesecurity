@@ -36,13 +36,20 @@
 <button type="submit" class="btn btn-lg btn-success">Disarm</button>
 </form>
 </div>
-</div>
 <div class="clearfix"></div>
 	{{/system_status}}
 	Sensors:
 	{{#sensors}}
 		{{> part_sensor}}<br/>
 	{{/sensors}}
+</div>
+
+<div class="clearfix"></div>
+<h3><small>Recent Events</small></h3>
+	{{#events}}
+		{{> part_event}}<br/>
+	{{/events}}
+</div>
 </div>
 </body>
 </html>

@@ -36,6 +36,13 @@ type Event struct {
 	WasArmed bool
 }
 
+type RecentEvent struct {
+	Time     string
+	Name     string
+	Action   string
+	WasArmed bool
+}
+
 type Flag struct {
 	Name  string
 	Value int
@@ -131,6 +138,7 @@ func GetAllEvents() (err error, events []Event) {
 	er = json.Unmarshal(maxItem.Val, &j)
 	events = append(events, j)
 	log.Println("Here", j)
+	count := 0
 	er = c.VisitItemsDescend(maxItem.Key, true, func(i *gkvlite.Item) bool {
 		j := Event{}
 		er := json.Unmarshal(i.Val, &j)
@@ -140,6 +148,10 @@ func GetAllEvents() (err error, events []Event) {
 			events = append(events, j)
 		}
 		log.Println("Here", j)
+		count++
+		if count > 100 {
+			return false
+		}
 		return true
 	})
 
@@ -233,6 +245,14 @@ func wantsHtml(req *rest.Request) bool {
 	return isHtml
 }
 
+func parseNanoDateToReadable(nsec uint64) string {
+
+	t := time.Unix((int64)(nsec/1000000000), 0)
+	layout := "Mon Jan 2 15:04:05"
+	edt, _ := time.LoadLocation("America/New_York")
+	return t.In(edt).Format(layout)
+}
+
 func parseDateToReadable(t time.Time) string {
 	layout := "Mon, 01/02/06, 03:04PM"
 	edt, _ := time.LoadLocation("America/New_York")
@@ -241,8 +261,27 @@ func parseDateToReadable(t time.Time) string {
 
 func getSystemStatus(w *rest.ResponseWriter, req *rest.Request) {
 	if wantsHtml(req) {
+		_, recentEvents := GetAllEvents()
+		recentEventsData := []RecentEvent{}
+		for _, item := range recentEvents {
+			r := RecentEvent{
+				Name:     item.Name,
+				Action:   item.Action,
+				WasArmed: item.WasArmed,
+				Time:     parseNanoDateToReadable(item.Time),
+			}
+			recentEventsData = append(recentEventsData, r)
+		}
+
 		filename := path.Join(path.Join(os.Getenv("PWD"), "templates"), "status.mustache")
-		output := mustache.RenderFile(filename, map[string]interface{}{"system_status": map[string]string{"Status": sysStatus.Status, "LastUpdateStr": parseDateToReadable(sysStatus.LastUpdate)}, "sensors": sensors})
+		output := mustache.RenderFile(filename, map[string]interface{}{
+			"system_status": map[string]string{
+				"Status":        sysStatus.Status,
+				"LastUpdateStr": parseDateToReadable(sysStatus.LastUpdate),
+			},
+			"sensors": sensors,
+			"events":  recentEventsData},
+		)
 		w.ResponseWriter.Write([]byte(output))
 
 	} else {
@@ -274,7 +313,7 @@ func handleDisarmSystem(w *rest.ResponseWriter, r *rest.Request) {
 }
 
 func handleDefault(w *rest.ResponseWriter, r *rest.Request) {
-	http.Redirect(w.ResponseWriter, r.Request, "http://foo", 302)
+	http.Redirect(w.ResponseWriter, r.Request, "/status", 302)
 }
 
 func notifyAlert(sensor *Sensor) {
@@ -320,12 +359,22 @@ func watchSensor(sensor *Sensor) {
 		if pin.Get() && !sensor.Alarm {
 			sensor.Alarm = pin.Get()
 			fmt.Printf("OPEN for %s (%d) triggered!\n\n", sensor.Name, sensor.Pin)
+			_ = AddEvent(Event{
+				Name:     sensor.Name,
+				Action:   "opened",
+				WasArmed: sysStatus.Status == "Armed",
+			})
 			if sysStatus.Status == "Armed" {
 				//notify
 				notifyAlert(sensor)
 			}
 		} else if !pin.Get() && sensor.Alarm {
 			sensor.Alarm = pin.Get()
+			_ = AddEvent(Event{
+				Name:     sensor.Name,
+				Action:   "closed",
+				WasArmed: sysStatus.Status == "Armed",
+			})
 			fmt.Printf("CLOSE for %s (%d) triggered!\n\n", sensor.Name, sensor.Pin)
 			if sysStatus.Status == "Armed" {
 				//notify
