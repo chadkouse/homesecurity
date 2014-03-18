@@ -1,0 +1,8 @@
+<div class="event">
+	{{#WasArmed}}
+		<div class="status alarm">{{Name}} - {{Action}} while armed [{{Time}}]</div>
+	{{/WasArmed}}
+	{{^WasArmed}}
+		<div class="status ok">{{Name}} - {{Action}} [{{Time}}]</div>
+	{{/WasArmed}}
+</div>

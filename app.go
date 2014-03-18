@@ -64,8 +64,10 @@ var f os.File
 var sensors []Sensor
 var s gkvlite.Store
 var sysStatus SystemStatus
-var dbname = "/tmp/test.db"
+var dbname = "test.db"
 var config map[string]string
+var buzzerPin gpio.Pin
+var notifyChannel chan bool
 
 func setObj(collection string, key []byte, object interface{}) (err error) {
 	f2, er := os.OpenFile(dbname, os.O_RDWR, 0666)
@@ -137,7 +139,7 @@ func GetAllEvents() (err error, events []Event) {
 	j := Event{}
 	er = json.Unmarshal(maxItem.Val, &j)
 	events = append(events, j)
-	log.Println("Here", j)
+	// log.Println("Here", j)
 	count := 0
 	er = c.VisitItemsDescend(maxItem.Key, true, func(i *gkvlite.Item) bool {
 		j := Event{}
@@ -147,7 +149,7 @@ func GetAllEvents() (err error, events []Event) {
 		} else {
 			events = append(events, j)
 		}
-		log.Println("Here", j)
+		// log.Println("Here", j)
 		count++
 		if count > 100 {
 			return false
@@ -215,6 +217,10 @@ func DisarmSystem() error {
 		return err
 	}
 	updateSystemStatus("Disarmed")
+	if notifyChannel != nil {
+		notifyChannel <- true
+	}
+	clearWarningBuzzer()
 	return setObj("flags", []byte("armed"), Flag{Name: "armed", Value: 0, Time: time.Now()})
 }
 
@@ -342,6 +348,35 @@ func notifyAlert(sensor *Sensor) {
 	}
 }
 
+func clearWarningBuzzer() {
+	var err error
+	if buzzerPin == nil {
+		buzzerPin, err = rpi.OpenPin(rpi.GPIO22, gpio.ModeOutput)
+		fmt.Println("opening buzzer pin")
+		if err != nil {
+			fmt.Printf("Error opening buzzer pin: %s", err)
+			return
+		}
+
+	}
+	buzzerPin.Clear()
+
+}
+
+func soundWarningBuzzer() {
+	var err error
+	if buzzerPin == nil {
+		buzzerPin, err = rpi.OpenPin(rpi.GPIO22, gpio.ModeOutput)
+		fmt.Println("opening buzzer pin")
+		if err != nil {
+			fmt.Printf("Error opening buzzer pin: %s", err)
+			return
+		}
+
+	}
+	buzzerPin.Set()
+}
+
 func watchSensor(sensor *Sensor) {
 	pin, err := rpi.OpenPin(sensor.Pin, gpio.ModeInput)
 	fmt.Printf("opening pin for %s (%d)!\n", sensor.Name, sensor.Pin)
@@ -365,8 +400,18 @@ func watchSensor(sensor *Sensor) {
 				WasArmed: sysStatus.Status == "Armed",
 			})
 			if sysStatus.Status == "Armed" {
-				//notify
-				notifyAlert(sensor)
+				soundWarningBuzzer()
+				notifyChannel = make(chan bool, 1)
+				select {
+				case <-notifyChannel:
+					notifyChannel = nil
+					log.Println("System was disarmed before notification timeout")
+				case <-time.After(time.Second * 30):
+					//notify
+					notifyChannel = nil
+					log.Println("System was NOT disarmed in time - Notifying!")
+					notifyAlert(sensor)
+				}
 			}
 		} else if !pin.Get() && sensor.Alarm {
 			sensor.Alarm = pin.Get()
@@ -399,6 +444,14 @@ func watchSensor(sensor *Sensor) {
 }
 
 func setupGPIO() {
+	var err error
+
+	buzzerPin, err = rpi.OpenPin(rpi.GPIO22, gpio.ModeOutput)
+	fmt.Printf("opening buzzer pin")
+	if err != nil {
+		fmt.Printf("Error opening buzzer pin: %s", err)
+		return
+	}
 
 	for i := range sensors {
 		go watchSensor(&sensors[i])
@@ -416,7 +469,9 @@ func setupGPIO() {
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for _ = range c {
-			fmt.Println("Closing blink and terminating program.")
+			fmt.Println("Closing buzzer and terminating program.")
+			buzzerPin.Clear()
+			buzzerPin.Close()
 			// power.Clear()
 			// power.Close()
 			os.Exit(0)
@@ -465,6 +520,8 @@ func structToMap(i interface{}) map[string]string {
 }
 
 func main() {
+
+	notifyChannel = nil
 
 	config = make(map[string]string)
 	err := cfg.Load("config.cfg", config)
